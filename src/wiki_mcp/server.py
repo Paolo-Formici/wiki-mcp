@@ -1,13 +1,18 @@
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from mcp.server.fastmcp import FastMCP
+
+try:
+    from mcp.server.mcpserver import MCPServer
+except ImportError:
+    from mcp.server.fastmcp import FastMCP as MCPServer
+
 from wiki_mcp.core import extract_snippet, parse_frontmatter, resolve_page_path
 
 
-def create_server(wiki_dir: Path) -> FastMCP:
-    """Create and configure the read-only FastMCP server for the target wiki."""
+def create_server(wiki_dir: Path) -> MCPServer:
+    """Create and configure the read-only MCP server for the target wiki."""
     wiki_dir = wiki_dir.resolve()
-    server = FastMCP(f"LLM-Wiki ({wiki_dir.name})")
+    server = MCPServer(f"LLM-Wiki ({wiki_dir.name})")
 
     # -------------------------------------------------------------
     # 1. READ ORIENTATION

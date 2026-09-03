@@ -76,8 +76,7 @@ def extract_snippet(text: str, query: str, max_chars: int = 250) -> str:
     start = max(0, idx - half_window)
     end = min(len(text), idx + len(query) + half_window)
 
-    snippet = text[start:end].replace("
-", " ").strip()
+    snippet = text[start:end].replace("\n", " ").strip()
     prefix = "..." if start > 0 else ""
     suffix = "..." if end < len(text) else ""
     return f"{prefix}{snippet}{suffix}"

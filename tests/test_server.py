@@ -1,5 +1,7 @@
+import asyncio
 import tempfile
 from pathlib import Path
+import pytest
 from wiki_mcp.core import parse_frontmatter, resolve_page_path, is_safe_path, extract_snippet
 from wiki_mcp.server import create_server
 
@@ -53,7 +55,8 @@ def test_snippet_extraction():
     assert "fox" in snippet
 
 
-def test_server_tools():
+@pytest.mark.anyio
+async def test_server_tools():
     with tempfile.TemporaryDirectory() as tmp:
         wiki = Path(tmp)
         (wiki / "SCHEMA.md").write_text("# Schema Rules", encoding="utf-8")
@@ -69,8 +72,19 @@ tags: [model]
 Body text discussing transformer models.""", encoding="utf-8")
 
         server = create_server(wiki)
-        # Find tools
-        tools = {tool.name: tool for tool in server._tool_manager.list_tools()}
-        assert "read_orientation" in tools
-        assert "search_wiki" in tools
-        assert "get_page" in tools
+        tools = await server.list_tools()
+        tool_names = [t.name for t in tools]
+
+        assert "read_orientation" in tool_names
+        assert "search_wiki" in tool_names
+        assert "get_page" in tool_names
+
+        # Test tool execution
+        orientation = await server.call_tool("read_orientation", {})
+        assert "Schema Rules" in str(orientation)
+
+        search_res = await server.call_tool("search_wiki", {"query": "transformer"})
+        assert "test-entity" in str(search_res)
+
+        page_res = await server.call_tool("get_page", {"slug_or_path": "test-entity"})
+        assert "Test Entity" in str(page_res)
