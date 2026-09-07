@@ -1,0 +1,21 @@
+services:
+  wiki-mcp:
+    build: .
+    container_name: wiki-mcp
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - REMOTE_MODE=true
+      - WIKI_PATH=/data/wiki
+      - WIKI_GIT_URL=${WIKI_GIT_URL:-}
+      - AUTH_TOKEN=${AUTH_TOKEN:-}
+      - WIKI_WEBHOOK_SECRET=${WIKI_WEBHOOK_SECRET:-}
+      - LOG_LEVEL=INFO
+    volumes:
+      - wiki-data:/data/wiki
+
+volumes:
+  wiki-data:

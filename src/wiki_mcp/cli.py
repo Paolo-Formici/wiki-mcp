@@ -2,7 +2,11 @@ import argparse
 import os
 import sys
 from pathlib import Path
+from wiki_mcp.logger import get_logger, log_event
+from wiki_mcp.remote import create_remote_server, get_streamable_app
 from wiki_mcp.server import create_server
+
+logger = get_logger("wiki_mcp.cli")
 
 
 def main():
@@ -16,17 +20,72 @@ def main():
         default=None,
         help="Target wiki directory path (defaults to WIKI_PATH env var or current directory)"
     )
+    parser.add_argument(
+        "--remote",
+        action="store_true",
+        default=os.getenv("REMOTE_MODE", "").lower() in ["1", "true", "yes"],
+        help="Run as a remote HTTP server using Streamable HTTP transport"
+    )
+    parser.add_argument(
+        "--host",
+        type=str,
+        default=os.getenv("HOST", "0.0.0.0"),
+        help="Host to bind for remote server (default: 0.0.0.0)"
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.getenv("PORT", "8000")),
+        help="Port to listen on for remote server (default: 8000)"
+    )
+    parser.add_argument(
+        "--git-url",
+        type=str,
+        default=os.getenv("WIKI_GIT_URL", None),
+        help="Git repository URL to clone on startup if wiki directory is empty"
+    )
+    parser.add_argument(
+        "--auth-token",
+        type=str,
+        default=os.getenv("AUTH_TOKEN", None),
+        help="Bearer token required for MCP endpoints (optional)"
+    )
+    parser.add_argument(
+        "--webhook-secret",
+        type=str,
+        default=os.getenv("WIKI_WEBHOOK_SECRET", None),
+        help="Secret for validating GitHub/GitLab webhook signatures"
+    )
+
     args = parser.parse_args()
 
     wiki_path_str = args.wiki_dir or os.getenv("WIKI_PATH", ".")
     wiki_path = Path(wiki_path_str).expanduser().resolve()
 
-    if not wiki_path.exists() or not wiki_path.is_dir():
-        sys.stderr.write(f"Error: Target wiki directory does not exist or is not a directory: {wiki_path}\n")
-        sys.exit(1)
+    if args.remote:
+        log_event(
+            logger, 20, "server_startup",
+            f"Starting remote Wiki MCP server on {args.host}:{args.port}",
+            wiki_dir=str(wiki_path), auth_enabled=bool(args.auth_token)
+        )
+        server = create_remote_server(
+            wiki_dir=wiki_path,
+            repo_url=args.git_url,
+            webhook_secret=args.webhook_secret,
+            auth_token=args.auth_token,
+        )
 
-    server = create_server(wiki_path)
-    server.run()
+        app = get_streamable_app(server, auth_token=args.auth_token)
+
+        import uvicorn
+        uvicorn.run(app, host=args.host, port=args.port, log_config=None)
+    else:
+        # Standard local stdio mode
+        if not wiki_path.exists() or not wiki_path.is_dir():
+            sys.stderr.write(f"Error: Target wiki directory not found: {wiki_path}\n")
+            sys.exit(1)
+        server = create_server(wiki_path)
+        server.run()
 
 
 if __name__ == "__main__":
