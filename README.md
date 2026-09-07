@@ -121,9 +121,121 @@ Developers on your team point their IDE (Antigravity IDE, Cursor, Claude Desktop
 
 ---
 
+## Architecture Overview
+
+```mermaid
+flowchart TB
+    subgraph Clients["Clients & Developers"]
+        IDE1["Local IDE (stdio)<br/>Cursor / Antigravity / Claude"]
+        IDE2["Team IDEs (HTTP MCP 2.x)<br/>Header: Bearer Token"]
+        HumanDev["Human Curators<br/>Obsidian / VS Code"]
+    end
+
+    subgraph Server["wiki-mcp Server"]
+        AuthMiddleware["TokenAuthMiddleware<br/>/mcp security"]
+        FastMCPEngine["FastMCP Read-Only Engine<br/>read_orientation, search_wiki, get_page"]
+        
+        subgraph SyncEngine["Git Sync & Ingestion Engine"]
+            WikiPull["Self-Mirror Sync<br/>POST /webhook<br/>(git pull --ff-only)"]
+            DocSync["Selective Doc Ingestion<br/>POST /webhook/repo-sync<br/>(1:1 GitHub API Fetch & Push)"]
+        end
+    end
+
+    subgraph Storage["dev-wiki Filesystem Mirror"]
+        Curated["Curated Layer (Silver/Gold)<br/>concepts/, entities/, comparisons/"]
+        Raw["Raw Layer (Bronze)<br/>raw/articles/, raw/repos/<repo>/..."]
+    end
+
+    subgraph Remotes["Remote Git Repositories"]
+        WikiRemote["Central dev-wiki Repo<br/>(GitHub / GitLab)"]
+        TeamRepos["External Team Repos<br/>(billing-service, auth-service, ...)"]
+    end
+
+    %% Client flows
+    IDE1 -->|"Direct Local stdio"| FastMCPEngine
+    IDE2 -->|"POST /mcp"| AuthMiddleware
+    AuthMiddleware --> FastMCPEngine
+    FastMCPEngine -->|"Read-only queries"| Storage
+    HumanDev -->|"git commit & push"| WikiRemote
+
+    %% Webhook & Sync flows
+    WikiRemote -->|"Push Event Webhook"| WikiPull
+    WikiPull -->|"Fast-forward pull"| Storage
+    
+    TeamRepos -->|"Push Webhook (Docs/ADR)"| DocSync
+    DocSync -->|"Write 1:1 verbatim"| Raw
+    DocSync -->|"git commit & push origin main"| WikiRemote
+```
+
+---
+
+## How Selective Doc Sync Works (`/webhook/repo-sync`)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant TeamRepo as External Team Repo
+    participant MCP as wiki-mcp Server
+    participant GH as GitHub REST API
+    participant Disk as Local Wiki Disk (raw/repos/)
+    participant Remote as dev-wiki Remote (main)
+
+    TeamRepo->>MCP: POST /webhook/repo-sync (push payload)
+    Note over MCP: Optional HMAC signature check (YAGNI)
+    
+    alt Commits contain only source code (e.g. src/**/*.ts)
+        MCP-->>TeamRepo: 200 OK {"status": "skipped", "message": "No doc files modified"}
+    else Commits modify README, docs/**, ADRs, or API contracts
+        Note over MCP: Filter doc files (README*, docs/**, *.md, openapi.*)
+        loop For each modified doc file
+            MCP->>GH: GET /repos/{owner}/{repo}/contents/{path}?ref={sha}
+            GH-->>MCP: Raw 1:1 file bytes
+            MCP->>Disk: Write verbatim to raw/repos/{repo}/{path}
+        end
+        
+        MCP->>Disk: git add raw/repos/{repo}/
+        MCP->>Disk: git commit -m "chore(raw): sync {repo} docs from {sha}"
+        
+        loop Push with Rebase Retry (up to 3x)
+            MCP->>Remote: git push origin main
+            alt Push rejected (remote progressed)
+                MCP->>Remote: git pull --rebase origin main
+            else Push accepted
+                Note over MCP: Push successful
+            end
+        end
+        
+        MCP-->>TeamRepo: 200 OK {"status": "synced", "files": [...]}
+    end
+```
+
+---
+
+## Wiki Convergence Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Dev as Developer / Curator
+    participant GH as dev-wiki Remote (GitHub)
+    participant MCP as Central wiki-mcp Daemon
+    participant Agent as Developer AI Agent (Cursor / Antigravity)
+
+    Dev->>GH: git push origin main (edits entities/ or concepts/)
+    GH->>MCP: POST /webhook (HMAC verified)
+    MCP->>MCP: git pull --ff-only
+    Note over MCP: Local wiki cache updated in milliseconds
+    
+    Agent->>MCP: POST /mcp (read_orientation / search_wiki / get_page)
+    MCP-->>Agent: Returns fresh, synchronized knowledge
+```
+
+---
+
 ## Principles & Architecture
 
 * **12-Factor XI (Logs):** Treats logs as unbuffered structured JSON event streams to `stdout`.
 * **12-Factor III (Config):** Configuration driven strictly by environment variables.
 * **Gall's Law & YAGNI:** Starts from a simple, reliable core (shallow Git clone + FastMCP + webhook) without unnecessary database or caching bloat.
 * **Wiki Principles (Ward Cunningham):** Convergence over locking, soft security via read-only access, and transparent observability via Git commit history and `log.md`.
+
