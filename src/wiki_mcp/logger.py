@@ -48,7 +48,4 @@ def get_logger(name: str = "wiki_mcp") -> logging.Logger:
 
 def log_event(logger: logging.Logger, level: int, event: str, message: str, **kwargs: Any) -> None:
     """Convenience helper to emit structured event logs."""
-    record = logger.makeRecord(
-        logger.name, level, "(unknown)", 0, message, (), None, None, {"event": event, "details": kwargs}
-    )
-    logger.handle(record)
+    logger.log(level, message, extra={"event": event, "details": kwargs})

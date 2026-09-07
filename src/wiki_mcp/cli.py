@@ -56,6 +56,30 @@ def main():
         default=os.getenv("WIKI_WEBHOOK_SECRET", None),
         help="Secret for validating GitHub/GitLab webhook signatures"
     )
+    parser.add_argument(
+        "--github-token",
+        type=str,
+        default=os.getenv("GITHUB_TOKEN", None),
+        help="GitHub API token for fetching files from team repos verbatim (optional)"
+    )
+    parser.add_argument(
+        "--repo-webhook-secret",
+        type=str,
+        default=os.getenv("REPO_WEBHOOK_SECRET", None),
+        help="Secret for validating team repo webhook signatures (optional)"
+    )
+    parser.add_argument(
+        "--allowed-repos",
+        type=str,
+        default=os.getenv("ALLOWED_REPOS", None),
+        help="Comma-separated list of allowed repo names (e.g. repo1,org/repo2)"
+    )
+    parser.add_argument(
+        "--git-branch",
+        type=str,
+        default=os.getenv("WIKI_GIT_BRANCH", "main"),
+        help="Target git branch to push synced docs to (default: main)"
+    )
 
     args = parser.parse_args()
 
@@ -63,6 +87,7 @@ def main():
     wiki_path = Path(wiki_path_str).expanduser().resolve()
 
     if args.remote:
+        allowed_list = [r.strip() for r in args.allowed_repos.split(",")] if args.allowed_repos else None
         log_event(
             logger, 20, "server_startup",
             f"Starting remote Wiki MCP server on {args.host}:{args.port}",
@@ -73,6 +98,10 @@ def main():
             repo_url=args.git_url,
             webhook_secret=args.webhook_secret,
             auth_token=args.auth_token,
+            github_token=args.github_token,
+            repo_webhook_secret=args.repo_webhook_secret,
+            allowed_repos=allowed_list,
+            git_branch=args.git_branch,
         )
 
         app = get_streamable_app(server, auth_token=args.auth_token)

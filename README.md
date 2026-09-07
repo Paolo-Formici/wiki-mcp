@@ -62,8 +62,12 @@ uv run --directory /Users/paolo/Projects/wiki-mcp wiki-mcp   --remote   --host 0
 | `PORT` | HTTP port | `8000` |
 | `WIKI_PATH` | Local filesystem path to cache/clone wiki | Current directory |
 | `WIKI_GIT_URL` | Git remote URL to clone if path is empty | `None` |
+| `WIKI_GIT_BRANCH` | Git branch to push synced raw docs to | `main` |
 | `AUTH_TOKEN` | Bearer token required for `/mcp` endpoints | `None` (open) |
-| `WIKI_WEBHOOK_SECRET` | Secret for verifying GitHub/GitLab webhooks | `None` (open) |
+| `WIKI_WEBHOOK_SECRET` | Secret for verifying wiki repository webhooks | `None` (open) |
+| `REPO_WEBHOOK_SECRET` | Secret for verifying external team repo webhooks | `None` (open, YAGNI) |
+| `GITHUB_TOKEN` | GitHub API token for fetching files 1:1 from repos | `None` (unauthenticated) |
+| `ALLOWED_REPOS` | Comma-separated allowlist of repos to sync | `None` (all incoming) |
 | `LOG_LEVEL` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) | `INFO` |
 
 ---
@@ -72,7 +76,9 @@ uv run --directory /Users/paolo/Projects/wiki-mcp wiki-mcp   --remote   --host 0
 
 * **`POST /mcp`**: The core MCP Streamable HTTP endpoint. If `AUTH_TOKEN` is configured, requests must supply `Authorization: Bearer <AUTH_TOKEN>`.
 * **`GET /health`**: Public liveness and readiness probe for load balancers. Returns `{"status": "healthy", "commit": "..."}`.
-* **`POST /webhook`**: Inbound webhook for GitHub (`X-Hub-Signature-256`) and GitLab (`X-Gitlab-Token`). Automatically triggers `git pull --ff-only` on the local mirror.
+* **`POST /webhook`**: Inbound webhook for the wiki's own repo (GitHub `X-Hub-Signature-256` / GitLab `X-Gitlab-Token`). Automatically triggers `git pull --ff-only` on the local mirror.
+* **`POST /webhook/repo-sync`**: Inbound webhook for external team repositories. Selectively filters for documentation (`README*`, `docs/**`, ADRs, OpenAPI contracts), fetches them verbatim 1:1 via GitHub REST API, saves them into `raw/repos/<repo-name>/...`, commits, and pushes directly to the wiki's remote Git repository. Secret verification is strictly optional (YAGNI).
+
 
 ---
 

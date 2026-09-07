@@ -32,34 +32,26 @@ def is_safe_path(base_dir: Path, target_path: Path) -> bool:
 def resolve_page_path(wiki_dir: Path, slug_or_path: str) -> Optional[Path]:
     """
     Resolves a wiki page path safely.
-    Handles:
-      - 'concepts/transformer.md'
-      - 'concepts/transformer'
-      - 'transformer' (searches standard wiki directories)
+    Handles direct paths ('concepts/transformer.md') or simple slugs ('transformer').
     """
     clean = slug_or_path.strip().removesuffix(".md")
     direct = (wiki_dir / f"{clean}.md").resolve()
 
-    if direct.exists() and direct.is_file() and is_safe_path(wiki_dir, direct):
+    if direct.is_file() and is_safe_path(wiki_dir, direct):
         return direct
 
-    # Search in standard Karpathy LLM-Wiki folders
-    search_dirs = [
-        "concepts",
-        "entities",
-        "comparisons",
-        "queries",
-        "raw/articles",
-        "raw/papers",
-        "raw/transcripts",
-        "raw",
-    ]
-    for rel_folder in search_dirs:
-        candidate = (wiki_dir / rel_folder / f"{clean}.md").resolve()
-        if candidate.exists() and candidate.is_file() and is_safe_path(wiki_dir, candidate):
-            return candidate
+    # Search markdown files across wiki directories (excluding hidden paths like .git)
+    return next(
+        (
+            p.resolve()
+            for p in wiki_dir.glob(f"**/{clean}.md")
+            if p.is_file()
+            and not any(part.startswith(".") for part in p.parts)
+            and is_safe_path(wiki_dir, p)
+        ),
+        None,
+    )
 
-    return None
 
 
 def extract_snippet(text: str, query: str, max_chars: int = 250) -> str:
