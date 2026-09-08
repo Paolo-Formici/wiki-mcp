@@ -95,15 +95,6 @@ In Remote Mode, `wiki-mcp` runs as a centralized daemon on a server or container
 
 ---
 
-### Clarification: Webhook for Wiki Repo vs. Cron for Source Repos
-
-| Responsibility | Mechanism | Target Repository | Description |
-| :--- | :--- | :--- | :--- |
-| **Wiki Read Cache Mirror** | `POST /webhook` and/or `SYNC_CRON` | **Only the wiki repo** (`dev-wiki`) | Keeps `wiki-mcp`'s local read cache synchronized with `dev-wiki` on GitHub. When a curator or PR updates `entities/` or `concepts/`, `wiki-mcp` pulls immediately. |
-| **External Source Docs Ingestion** | **Scheduled Cron Orchestrator** | **Team repos** (`raw/repos/`) | External team repos do **NOT** send webhooks to `wiki-mcp`. A scheduled cron pipeline stages their documentation into `dev-wiki/raw/repos/`, checks diffs via native Git, and opens a **Pull Request** for human review. |
-
----
-
 ## Remote Endpoints
 
 * **`POST /mcp`**: The core MCP Streamable HTTP endpoint. If `AUTH_TOKEN` is configured, requests must supply `Authorization: Bearer <AUTH_TOKEN>`.
@@ -189,7 +180,7 @@ flowchart TB
 
     subgraph Storage["dev-wiki Filesystem Mirror"]
         Curated["Curated Layer (Silver/Gold)<br/>concepts/, entities/, comparisons/"]
-        Raw["Raw Layer (Bronze)<br/>raw/articles/, raw/playbooks/, raw/repos/"]
+        Raw["Raw Layer (Bronze)<br/>raw/articles/, raw/playbooks/"]
     end
 
     subgraph Remotes["Remote Git Repositories"]
