@@ -1,27 +1,43 @@
 # wiki-mcp
 
-A fast, read-only [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server for [Karpathy-style LLM Markdown wikis](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f).
+A high-performance, read-only [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server written in **Go** for [Karpathy-style LLM Markdown wikis](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f).
 
-Supports both **Local Mode** (`stdio`) and **Remote Mode** (**Streamable HTTP**, MCP 2.x standard) backed by a Git repository with automatic webhook synchronization.
+Packaged as a single static binary (~8.7MB) with zero external runtime dependencies, ultra-fast startup (<10ms), and minimal memory usage (~10MB RAM).
+
+Supports both **Local Mode** (`stdio`) and **Remote Mode** (**Streamable HTTP**, MCP 2.x standard) backed by a Git repository with automatic webhook and cron synchronization.
 
 ---
 
 ## The 3 Read-Only Tools
 
-1. **`read_orientation()`**: Reads `SCHEMA.md`, `index.md`, and the last 30 lines of `log.md` in a single roundtrip.
-2. **`search_wiki(query, tag=None)`**: Fast full-text and taxonomy-tag search across curated wiki directories (`concepts/`, `entities/`, `comparisons/`, `queries/`).
-3. **`get_page(slug_or_path)`**: Safely reads any wiki page, cleanly parsing frontmatter YAML and markdown body.
+1. **`read_orientation()`**: Reads `SCHEMA.md`, `index.md`, and the last 30 lines of `log.md` in a single roundtrip for instant agent orientation.
+2. **`search_wiki(query, tag="")`**: Fast full-text and taxonomy-tag search across curated wiki directories (`concepts/`, `entities/`, `comparisons/`, `queries/`).
+3. **`get_page(slug_or_path)`**: Safely reads any wiki page, cleanly parsing frontmatter YAML and markdown body. Accepts direct paths (`concepts/auth.md`) or simple slugs (`auth`).
 
 Zero file mutation or deletion tools are exposed, guaranteeing your wiki's integrity.
 
 ---
 
-## Running in Local Mode (stdio)
+## Build & Install
 
-Run directly against your local wiki using `uv`:
+Requires Go 1.23+:
 
 ```bash
-uv run --directory /Users/paolo/Projects/wiki-mcp wiki-mcp --wiki-dir /path/to/wiki
+# Build static binary to bin/wiki-mcp
+make build
+
+# Or install to $GOPATH/bin
+go install ./cmd/wiki-mcp
+```
+
+---
+
+## Running in Local Mode (stdio)
+
+Run directly against your local wiki:
+
+```bash
+./bin/wiki-mcp stdio --wiki-dir /path/to/wiki
 ```
 
 ### Local Client Config (`mcp_config.json`):
@@ -29,12 +45,9 @@ uv run --directory /Users/paolo/Projects/wiki-mcp wiki-mcp --wiki-dir /path/to/w
 {
   "mcpServers": {
     "dev-wiki": {
-      "command": "uv",
+      "command": "/Users/paolo/Projects/wiki-mcp/bin/wiki-mcp",
       "args": [
-        "run",
-        "--directory",
-        "/Users/paolo/Projects/wiki-mcp",
-        "wiki-mcp",
+        "stdio",
         "--wiki-dir",
         "/path/to/wiki"
       ]
@@ -47,44 +60,47 @@ uv run --directory /Users/paolo/Projects/wiki-mcp wiki-mcp --wiki-dir /path/to/w
 
 ## Running in Remote Mode (Streamable HTTP)
 
-In Remote Mode, `wiki-mcp` runs as a centralized daemon on a server or Docker container. It clones/pulls the wiki Git repo on startup and listens for incoming IDE connections and GitHub/GitLab webhooks.
+In Remote Mode, `wiki-mcp` runs as a centralized daemon on a server or container. It optionally clones/pulls the wiki Git repo on startup and listens for incoming IDE connections and GitHub/GitLab webhooks.
 
 ### CLI Launch
 ```bash
-uv run --directory /Users/paolo/Projects/wiki-mcp wiki-mcp   --remote   --host 0.0.0.0   --port 8000   --wiki-dir /data/wiki   --git-url "https://github.com/your-org/dev-wiki.git"   --auth-token "team-secret-token"   --webhook-secret "webhook-hmac-secret"
+./bin/wiki-mcp serve \
+  --host 0.0.0.0 \
+  --port 8080 \
+  --wiki-dir /data/wiki \
+  --repo-url "https://github.com/your-org/dev-wiki.git" \
+  --auth-token "team-secret-token" \
+  --webhook-secret "webhook-hmac-secret" \
+  --sync-cron "*/5 * * * *"
 ```
 
 ### Environment Variables
 | Variable | Description | Default |
 | :--- | :--- | :--- |
-| `REMOTE_MODE` | Set to `true` or `1` for HTTP mode | `false` |
 | `HOST` | Bind address | `0.0.0.0` |
-| `PORT` | HTTP port | `8000` |
-| `WIKI_PATH` | Local filesystem path to cache/clone wiki | Current directory |
-| `WIKI_GIT_URL` | Git remote URL to clone if path is empty | `None` |
-| `AUTH_TOKEN` | Bearer token required for `/mcp` endpoints | `None` (open) |
-| `WIKI_WEBHOOK_SECRET` | Secret for verifying wiki repository webhooks | `None` (open) |
-| `SYNC_CRON` | Standard 5-field cron expression for periodic git pull (e.g. `*/5 * * * *`) | `None` (webhook-only) |
-| `LOG_LEVEL` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) | `INFO` |
+| `PORT` | HTTP port | `8080` |
+| `WIKI_DIR` | Local filesystem path to cache/clone wiki | Current directory (`.`) |
+| `REPO_URL` | Git remote URL to clone if path is empty | `""` |
+| `AUTH_TOKEN` | Bearer token required for `/mcp` endpoints | `""` (open) |
+| `WEBHOOK_SECRET` | Secret for verifying wiki repository webhooks | `""` (open) |
+| `SYNC_CRON` | Standard 5-field cron expression for periodic git pull (e.g. `*/5 * * * *`) | `""` (webhook-only) |
 
 ---
 
 ### Remote Git Sync Modes
 `wiki-mcp` remote mode supports three operational synchronization models:
-1. **Webhook-only (Default):** Set `WIKI_WEBHOOK_SECRET`. When commits are pushed to the wiki repository, GitHub/GitLab hits `POST /webhook` to trigger an immediate `git pull --ff-only`.
+1. **Webhook-only (Default):** Set `WEBHOOK_SECRET`. When commits are pushed to the wiki repository, GitHub/GitLab hits `POST /webhook` to trigger an immediate `git pull --ff-only`.
 2. **Cron-only (Zero-Ingress / Private Networks):** Set `SYNC_CRON="*/5 * * * *"`. The server periodically runs `git pull --ff-only` in the background. Ideal for air-gapped or private networks/VPCs where opening inbound webhook ingress is not possible or desired.
-3. **Hybrid (GitOps Best Practice):** Configure both `WIKI_WEBHOOK_SECRET` and `SYNC_CRON`. Pushes trigger instant zero-latency sync via webhook, while the cron scheduler acts as a background reconciliation loop ensuring eventual consistency. An internal `asyncio.Lock` guarantees that webhook and cron runs never collide.
+3. **Hybrid (GitOps Best Practice):** Configure both `WEBHOOK_SECRET` and `SYNC_CRON`. Pushes trigger instant zero-latency sync via webhook, while the cron scheduler acts as a background reconciliation loop ensuring eventual consistency. An internal mutex guarantees that webhook and cron pulls never collide.
 
 ---
 
 ### Clarification: Webhook for Wiki Repo vs. Cron for Source Repos
 
-It is essential to understand the clear separation of responsibilities:
-
 | Responsibility | Mechanism | Target Repository | Description |
 | :--- | :--- | :--- | :--- |
 | **Wiki Read Cache Mirror** | `POST /webhook` and/or `SYNC_CRON` | **Only the wiki repo** (`dev-wiki`) | Keeps `wiki-mcp`'s local read cache synchronized with `dev-wiki` on GitHub. When a curator or PR updates `entities/` or `concepts/`, `wiki-mcp` pulls immediately. |
-| **External Source Docs Ingestion** | **Scheduled Cron Orchestrator** | **Team repos** (`raw/repos/`) | External team repos do **NOT** send webhooks to `wiki-mcp`. A scheduled cron job pulls their documentation into `dev-wiki/raw/repos/`, checks diffs via native Git, and opens a **Pull Request** for human review. |
+| **External Source Docs Ingestion** | **Scheduled Cron Orchestrator** | **Team repos** (`raw/repos/`) | External team repos do **NOT** send webhooks to `wiki-mcp`. A scheduled cron pipeline stages their documentation into `dev-wiki/raw/repos/`, checks diffs via native Git, and opens a **Pull Request** for human review. |
 
 ---
 
@@ -96,22 +112,20 @@ It is essential to understand the clear separation of responsibilities:
   {
     "status": "healthy",
     "wiki": "/data/wiki",
-    "commit": "a1b2c3d",
+    "commit": "050420c",
     "sync": {
       "mode": "hybrid",
       "cron_expression": "*/5 * * * *",
       "cron_enabled": true,
-      "last_sync_at": "2026-09-08T12:05:00.123456+00:00",
+      "last_sync_at": "2026-09-08T22:05:00Z",
       "last_sync_trigger": "cron",
-      "last_sync_status": "synced",
-      "last_sync_commit": "a1b2c3d",
-      "last_sync_error": null
+      "last_sync_status": "success",
+      "last_sync_commit": "050420c",
+      "last_sync_error": ""
     }
   }
   ```
 * **`POST /webhook`**: Inbound webhook for the wiki's own repo (GitHub `X-Hub-Signature-256` / GitLab `X-Gitlab-Token`). Automatically triggers `git pull --ff-only` on the local mirror.
-
-
 
 ---
 
@@ -125,11 +139,11 @@ docker compose up -d
 ### Docker Run
 ```bash
 docker run -d \
-  -p 8000:8000 \
+  -p 8080:8080 \
   -v wiki-data:/data/wiki \
-  -e WIKI_GIT_URL="https://github.com/your-org/dev-wiki.git" \
+  -e REPO_URL="https://github.com/your-org/dev-wiki.git" \
   -e AUTH_TOKEN="team-secret-token" \
-  -e WIKI_WEBHOOK_SECRET="webhook-hmac-secret" \
+  -e WEBHOOK_SECRET="webhook-hmac-secret" \
   wiki-mcp:latest
 ```
 
@@ -164,9 +178,9 @@ flowchart TB
         HumanDev["Human Curators<br/>Obsidian / VS Code"]
     end
 
-    subgraph Server["wiki-mcp Server"]
+    subgraph Server["wiki-mcp Server (Go)"]
         AuthMiddleware["TokenAuthMiddleware<br/>/mcp security"]
-        FastMCPEngine["FastMCP Read-Only Engine<br/>read_orientation, search_wiki, get_page"]
+        GoMCPEngine["Go MCP Engine (mcp-go)<br/>read_orientation, search_wiki, get_page"]
         
         subgraph SyncEngine["Git Sync Engine"]
             WikiPull["Self-Mirror Sync<br/>POST /webhook or SYNC_CRON<br/>(git pull --ff-only)"]
@@ -183,10 +197,10 @@ flowchart TB
     end
 
     %% Client flows
-    IDE1 -->|"Direct Local stdio"| FastMCPEngine
+    IDE1 -->|"Direct Local stdio"| GoMCPEngine
     IDE2 -->|"POST /mcp"| AuthMiddleware
-    AuthMiddleware --> FastMCPEngine
-    FastMCPEngine -->|"Read-only queries"| Storage
+    AuthMiddleware --> GoMCPEngine
+    GoMCPEngine -->|"Read-only queries"| Storage
     HumanDev -->|"git commit & push"| WikiRemote
 
     %% Webhook & Sync flows
@@ -196,31 +210,10 @@ flowchart TB
 
 ---
 
-## Wiki Convergence Flow
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Dev as Developer / Curator
-    participant GH as dev-wiki Remote (GitHub)
-    participant MCP as Central wiki-mcp Daemon
-    participant Agent as Developer AI Agent (Cursor / Antigravity)
-
-    Dev->>GH: git push origin main (edits entities/ or concepts/)
-    GH->>MCP: POST /webhook (HMAC verified)
-    MCP->>MCP: git pull --ff-only
-    Note over MCP: Local wiki cache updated in milliseconds
-    
-    Agent->>MCP: POST /mcp (read_orientation / search_wiki / get_page)
-    MCP-->>Agent: Returns fresh, synchronized knowledge
-```
-
----
-
 ## Principles & Architecture
 
-* **12-Factor XI (Logs):** Treats logs as unbuffered structured JSON event streams to `stdout`.
-* **12-Factor III (Config):** Configuration driven strictly by environment variables.
-* **Gall's Law & YAGNI:** Starts from a simple, reliable core (shallow Git clone + FastMCP + webhook) without unnecessary database or caching bloat.
+* **Single Static Binary:** Zero Python runtime, pip, or venv overhead. Statically compiled Go binary (~8.7MB).
+* **12-Factor XI (Logs):** Treats logs as unbuffered event streams to `stdout`.
+* **12-Factor III (Config):** Configuration driven strictly by environment variables or CLI flags.
+* **Gall's Law & YAGNI:** Starts from a simple, reliable core (shallow Git clone + native MCP + webhook) without unnecessary database or caching bloat.
 * **Wiki Principles (Ward Cunningham):** Convergence over locking, soft security via read-only access, and transparent observability via Git commit history and `log.md`.
-

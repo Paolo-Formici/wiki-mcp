@@ -21,4 +21,4 @@ htmlcov/
 .vscode/
 .idea/
 
-.planning/
+bin/

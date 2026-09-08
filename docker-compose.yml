@@ -4,17 +4,15 @@ services:
     container_name: wiki-mcp
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "8080:8080"
     environment:
       - HOST=0.0.0.0
-      - PORT=8000
-      - REMOTE_MODE=true
-      - WIKI_PATH=/data/wiki
-      - WIKI_GIT_URL=${WIKI_GIT_URL:-}
+      - PORT=8080
+      - WIKI_DIR=/data/wiki
+      - REPO_URL=${REPO_URL:-}
       - AUTH_TOKEN=${AUTH_TOKEN:-}
-      - WIKI_WEBHOOK_SECRET=${WIKI_WEBHOOK_SECRET:-}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET:-}
       - SYNC_CRON=${SYNC_CRON:-}
-      - LOG_LEVEL=INFO
     volumes:
       - wiki-data:/data/wiki
 
