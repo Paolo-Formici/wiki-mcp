@@ -62,12 +62,8 @@ uv run --directory /Users/paolo/Projects/wiki-mcp wiki-mcp   --remote   --host 0
 | `PORT` | HTTP port | `8000` |
 | `WIKI_PATH` | Local filesystem path to cache/clone wiki | Current directory |
 | `WIKI_GIT_URL` | Git remote URL to clone if path is empty | `None` |
-| `WIKI_GIT_BRANCH` | Git branch to push synced raw docs to | `main` |
 | `AUTH_TOKEN` | Bearer token required for `/mcp` endpoints | `None` (open) |
 | `WIKI_WEBHOOK_SECRET` | Secret for verifying wiki repository webhooks | `None` (open) |
-| `REPO_WEBHOOK_SECRET` | Secret for verifying external team repo webhooks | `None` (open, YAGNI) |
-| `GITHUB_TOKEN` | GitHub API token for fetching files 1:1 from repos | `None` (unauthenticated) |
-| `ALLOWED_REPOS` | Comma-separated allowlist of repos to sync | `None` (all incoming) |
 | `SYNC_CRON` | Standard 5-field cron expression for periodic git pull (e.g. `*/5 * * * *`) | `None` (webhook-only) |
 | `LOG_LEVEL` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) | `INFO` |
 
@@ -103,7 +99,6 @@ uv run --directory /Users/paolo/Projects/wiki-mcp wiki-mcp   --remote   --host 0
   }
   ```
 * **`POST /webhook`**: Inbound webhook for the wiki's own repo (GitHub `X-Hub-Signature-256` / GitLab `X-Gitlab-Token`). Automatically triggers `git pull --ff-only` on the local mirror.
-* **`POST /webhook/repo-sync`**: Inbound webhook for external team repositories. Selectively filters for documentation (`README*`, `docs/**`, ADRs, OpenAPI contracts), fetches them verbatim 1:1 via GitHub REST API, saves them into `raw/repos/<repo-name>/...`, commits, and pushes directly to the wiki's remote Git repository. Secret verification is strictly optional (YAGNI).
 
 
 
@@ -162,20 +157,18 @@ flowchart TB
         AuthMiddleware["TokenAuthMiddleware<br/>/mcp security"]
         FastMCPEngine["FastMCP Read-Only Engine<br/>read_orientation, search_wiki, get_page"]
         
-        subgraph SyncEngine["Git Sync & Ingestion Engine"]
-            WikiPull["Self-Mirror Sync<br/>POST /webhook<br/>(git pull --ff-only)"]
-            DocSync["Selective Doc Ingestion<br/>POST /webhook/repo-sync<br/>(1:1 GitHub API Fetch & Push)"]
+        subgraph SyncEngine["Git Sync Engine"]
+            WikiPull["Self-Mirror Sync<br/>POST /webhook or SYNC_CRON<br/>(git pull --ff-only)"]
         end
     end
 
     subgraph Storage["dev-wiki Filesystem Mirror"]
         Curated["Curated Layer (Silver/Gold)<br/>concepts/, entities/, comparisons/"]
-        Raw["Raw Layer (Bronze)<br/>raw/articles/, raw/repos/<repo>/..."]
+        Raw["Raw Layer (Bronze)<br/>raw/articles/, raw/playbooks/, raw/repos/"]
     end
 
     subgraph Remotes["Remote Git Repositories"]
         WikiRemote["Central dev-wiki Repo<br/>(GitHub / GitLab)"]
-        TeamRepos["External Team Repos<br/>(billing-service, auth-service, ...)"]
     end
 
     %% Client flows
@@ -188,52 +181,6 @@ flowchart TB
     %% Webhook & Sync flows
     WikiRemote -->|"Push Event Webhook"| WikiPull
     WikiPull -->|"Fast-forward pull"| Storage
-    
-    TeamRepos -->|"Push Webhook (Docs/ADR)"| DocSync
-    DocSync -->|"Write 1:1 verbatim"| Raw
-    DocSync -->|"git commit & push origin main"| WikiRemote
-```
-
----
-
-## How Selective Doc Sync Works (`/webhook/repo-sync`)
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant TeamRepo as External Team Repo
-    participant MCP as wiki-mcp Server
-    participant GH as GitHub REST API
-    participant Disk as Local Wiki Disk (raw/repos/)
-    participant Remote as dev-wiki Remote (main)
-
-    TeamRepo->>MCP: POST /webhook/repo-sync (push payload)
-    Note over MCP: Optional HMAC signature check (YAGNI)
-    
-    alt Commits contain only source code (e.g. src/**/*.ts)
-        MCP-->>TeamRepo: 200 OK {"status": "skipped", "message": "No doc files modified"}
-    else Commits modify README, docs/**, ADRs, or API contracts
-        Note over MCP: Filter doc files (README*, docs/**, *.md, openapi.*)
-        loop For each modified doc file
-            MCP->>GH: GET /repos/{owner}/{repo}/contents/{path}?ref={sha}
-            GH-->>MCP: Raw 1:1 file bytes
-            MCP->>Disk: Write verbatim to raw/repos/{repo}/{path}
-        end
-        
-        MCP->>Disk: git add raw/repos/{repo}/
-        MCP->>Disk: git commit -m "chore(raw): sync {repo} docs from {sha}"
-        
-        loop Push with Rebase Retry (up to 3x)
-            MCP->>Remote: git push origin main
-            alt Push rejected (remote progressed)
-                MCP->>Remote: git pull --rebase origin main
-            else Push accepted
-                Note over MCP: Push successful
-            end
-        end
-        
-        MCP-->>TeamRepo: 200 OK {"status": "synced", "files": [...]}
-    end
 ```
 
 ---
