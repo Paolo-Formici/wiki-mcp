@@ -68,16 +68,43 @@ uv run --directory /Users/paolo/Projects/wiki-mcp wiki-mcp   --remote   --host 0
 | `REPO_WEBHOOK_SECRET` | Secret for verifying external team repo webhooks | `None` (open, YAGNI) |
 | `GITHUB_TOKEN` | GitHub API token for fetching files 1:1 from repos | `None` (unauthenticated) |
 | `ALLOWED_REPOS` | Comma-separated allowlist of repos to sync | `None` (all incoming) |
+| `SYNC_CRON` | Standard 5-field cron expression for periodic git pull (e.g. `*/5 * * * *`) | `None` (webhook-only) |
 | `LOG_LEVEL` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) | `INFO` |
+
+---
+
+### Remote Git Sync Modes
+`wiki-mcp` remote mode supports three operational synchronization models:
+1. **Webhook-only (Default):** Set `WIKI_WEBHOOK_SECRET`. When commits are pushed to the wiki repository, GitHub/GitLab hits `POST /webhook` to trigger an immediate `git pull --ff-only`.
+2. **Cron-only (Zero-Ingress / Private Networks):** Set `SYNC_CRON="*/5 * * * *"`. The server periodically runs `git pull --ff-only` in the background. Ideal for air-gapped or private networks/VPCs where opening inbound webhook ingress is not possible or desired.
+3. **Hybrid (GitOps Best Practice):** Configure both `WIKI_WEBHOOK_SECRET` and `SYNC_CRON`. Pushes trigger instant zero-latency sync via webhook, while the cron scheduler acts as a background reconciliation loop ensuring eventual consistency. An internal `asyncio.Lock` guarantees that webhook and cron runs never collide.
 
 ---
 
 ## Remote Endpoints
 
 * **`POST /mcp`**: The core MCP Streamable HTTP endpoint. If `AUTH_TOKEN` is configured, requests must supply `Authorization: Bearer <AUTH_TOKEN>`.
-* **`GET /health`**: Public liveness and readiness probe for load balancers. Returns `{"status": "healthy", "commit": "..."}`.
+* **`GET /health`**: Public liveness and readiness probe for load balancers. Returns health and detailed sync state:
+  ```json
+  {
+    "status": "healthy",
+    "wiki": "/data/wiki",
+    "commit": "a1b2c3d",
+    "sync": {
+      "mode": "hybrid",
+      "cron_expression": "*/5 * * * *",
+      "cron_enabled": true,
+      "last_sync_at": "2026-09-08T12:05:00.123456+00:00",
+      "last_sync_trigger": "cron",
+      "last_sync_status": "synced",
+      "last_sync_commit": "a1b2c3d",
+      "last_sync_error": null
+    }
+  }
+  ```
 * **`POST /webhook`**: Inbound webhook for the wiki's own repo (GitHub `X-Hub-Signature-256` / GitLab `X-Gitlab-Token`). Automatically triggers `git pull --ff-only` on the local mirror.
 * **`POST /webhook/repo-sync`**: Inbound webhook for external team repositories. Selectively filters for documentation (`README*`, `docs/**`, ADRs, OpenAPI contracts), fetches them verbatim 1:1 via GitHub REST API, saves them into `raw/repos/<repo-name>/...`, commits, and pushes directly to the wiki's remote Git repository. Secret verification is strictly optional (YAGNI).
+
 
 
 ---

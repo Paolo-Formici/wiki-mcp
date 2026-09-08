@@ -13,6 +13,7 @@ services:
       - WIKI_GIT_URL=${WIKI_GIT_URL:-}
       - AUTH_TOKEN=${AUTH_TOKEN:-}
       - WIKI_WEBHOOK_SECRET=${WIKI_WEBHOOK_SECRET:-}
+      - SYNC_CRON=${SYNC_CRON:-}
       - LOG_LEVEL=INFO
     volumes:
       - wiki-data:/data/wiki

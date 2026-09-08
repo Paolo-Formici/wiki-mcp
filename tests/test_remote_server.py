@@ -62,3 +62,44 @@ def test_webhook_endpoint(temp_wiki):
         res = client.post("/webhook", content=payload, headers={"X-Hub-Signature-256": sig})
         # Will attempt git pull and return status (200 or 500 if temp dir has no remote origin)
         assert res.status_code in [200, 500]
+
+
+def test_health_check_sync_metadata(temp_wiki):
+    # Without cron (default: webhook mode)
+    server_webhook = create_remote_server(temp_wiki)
+    app_webhook = get_streamable_app(server_webhook)
+    with TestClient(app_webhook) as client:
+        res = client.get("/health")
+        data = res.json()
+        assert data["sync"]["mode"] == "webhook"
+        assert data["sync"]["cron_enabled"] is False
+        assert data["sync"]["cron_expression"] is None
+
+    # With cron (hybrid mode)
+    server_cron = create_remote_server(temp_wiki, sync_cron="*/10 * * * *", webhook_secret="secret")
+    app_cron = get_streamable_app(server_cron)
+    with TestClient(app_cron) as client:
+        res = client.get("/health")
+        data = res.json()
+        assert data["sync"]["mode"] == "hybrid"
+        assert data["sync"]["cron_enabled"] is True
+        assert data["sync"]["cron_expression"] == "*/10 * * * *"
+
+
+def test_remote_app_lifespan_manages_scheduler(temp_wiki):
+    server = create_remote_server(temp_wiki, sync_cron="*/15 * * * *")
+    scheduler = getattr(server, "_cron_scheduler")
+    assert scheduler is not None
+    assert scheduler._task is None
+
+    app = get_streamable_app(server)
+    with TestClient(app):
+        # Inside context, scheduler should be running
+        assert scheduler._running is True
+        assert scheduler._task is not None
+        assert not scheduler._task.done()
+
+    # Outside context, scheduler should be stopped
+    assert scheduler._running is False
+    assert scheduler._task is None
+

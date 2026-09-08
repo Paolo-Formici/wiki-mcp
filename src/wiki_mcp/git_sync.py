@@ -6,7 +6,29 @@ from pathlib import Path
 from typing import Optional, Tuple
 from wiki_mcp.logger import get_logger, log_event
 
+from dataclasses import dataclass
+from datetime import datetime, timezone
+
 logger = get_logger("wiki_mcp.git_sync")
+
+_pull_lock = asyncio.Lock()
+
+
+@dataclass
+class SyncMetadata:
+    last_sync_at: Optional[str] = None
+    last_sync_status: str = "idle"
+    last_sync_trigger: Optional[str] = None
+    last_sync_commit: Optional[str] = None
+    last_sync_error: Optional[str] = None
+
+
+_sync_metadata = SyncMetadata()
+
+
+def get_sync_metadata() -> SyncMetadata:
+    """Returns the current sync metadata."""
+    return _sync_metadata
 
 
 def git_cmd(wiki_dir: Path, *args: str) -> Tuple[int, str, str]:
@@ -53,14 +75,22 @@ def ensure_git_repo(wiki_dir: Path, repo_url: Optional[str] = None) -> None:
     """
     wiki_dir = wiki_dir.resolve()
     git_dir = wiki_dir / ".git"
+    now_iso = datetime.now(timezone.utc).isoformat()
 
     if git_dir.exists():
         log_event(logger, 20, "git_sync_startup", f"Updating existing wiki mirror at {wiki_dir}")
         code, out, err = git_cmd(wiki_dir, "pull", "--ff-only")
         commit = get_current_commit(wiki_dir)
+        _sync_metadata.last_sync_at = now_iso
+        _sync_metadata.last_sync_trigger = "startup"
+        _sync_metadata.last_sync_commit = commit
         if code == 0:
+            _sync_metadata.last_sync_status = "synced"
+            _sync_metadata.last_sync_error = None
             log_event(logger, 20, "git_sync_startup_success", f"Updated to commit {commit}", output=out)
         else:
+            _sync_metadata.last_sync_status = "failed"
+            _sync_metadata.last_sync_error = err
             log_event(logger, 30, "git_sync_startup_warning", f"git pull failed: {err}")
     elif repo_url:
         log_event(logger, 20, "git_clone_startup", f"Cloning shallow mirror from {repo_url} into {wiki_dir}")
@@ -70,37 +100,62 @@ def ensure_git_repo(wiki_dir: Path, repo_url: Optional[str] = None) -> None:
             capture_output=True,
             text=True,
         )
+        commit = get_current_commit(wiki_dir)
+        _sync_metadata.last_sync_at = now_iso
+        _sync_metadata.last_sync_trigger = "startup"
+        _sync_metadata.last_sync_commit = commit
         if res.returncode == 0:
-            commit = get_current_commit(wiki_dir)
+            _sync_metadata.last_sync_status = "synced"
+            _sync_metadata.last_sync_error = None
             log_event(logger, 20, "git_clone_startup_success", f"Cloned at commit {commit}")
         else:
             err = res.stderr.strip()
+            _sync_metadata.last_sync_status = "failed"
+            _sync_metadata.last_sync_error = err
             log_event(logger, 40, "git_clone_startup_error", f"git clone failed: {err}")
             raise RuntimeError(f"Failed to clone wiki repository: {err}")
     else:
+        commit = get_current_commit(wiki_dir)
+        _sync_metadata.last_sync_commit = commit
         log_event(logger, 20, "git_sync_local_mode", f"Running on local folder without git remote: {wiki_dir}")
 
 
-async def pull_repo_async(wiki_dir: Path) -> Tuple[bool, str, str]:
+async def pull_repo_async(wiki_dir: Path, trigger: str = "webhook") -> Tuple[bool, str, str]:
     """
     Asynchronously pulls upstream changes using git pull --ff-only.
+    Acquires _pull_lock to serialize concurrent pulls.
+    Updates sync metadata.
     Returns (success, new_commit, output_message).
     """
-    log_event(logger, 20, "git_pull_start", f"Triggering git pull in {wiki_dir}")
-    try:
-        code, out, err = await git_cmd_async(wiki_dir, "pull", "--ff-only")
-        commit = get_current_commit(wiki_dir)
-        output = out if code == 0 else err
+    async with _pull_lock:
+        log_event(logger, 20, "git_pull_start", f"Triggering git pull in {wiki_dir} (trigger={trigger})")
+        now_iso = datetime.now(timezone.utc).isoformat()
+        try:
+            code, out, err = await git_cmd_async(wiki_dir, "pull", "--ff-only")
+            commit = get_current_commit(wiki_dir)
+            output = out if code == 0 else err
 
-        if code == 0:
-            log_event(logger, 20, "git_pull_success", f"Synced to commit {commit}", output=output)
-            return True, commit, output
-        else:
-            log_event(logger, 40, "git_pull_failed", f"Failed to pull: {output}", returncode=code)
-            return False, commit, output
-    except Exception as e:
-        log_event(logger, 40, "git_pull_exception", f"Exception during git pull: {str(e)}")
-        return False, "unknown", str(e)
+            _sync_metadata.last_sync_at = now_iso
+            _sync_metadata.last_sync_trigger = trigger
+            _sync_metadata.last_sync_commit = commit
+
+            if code == 0:
+                _sync_metadata.last_sync_status = "synced"
+                _sync_metadata.last_sync_error = None
+                log_event(logger, 20, "git_pull_success", f"Synced to commit {commit}", output=output, trigger=trigger)
+                return True, commit, output
+            else:
+                _sync_metadata.last_sync_status = "failed"
+                _sync_metadata.last_sync_error = output
+                log_event(logger, 40, "git_pull_failed", f"Failed to pull: {output}", returncode=code, trigger=trigger)
+                return False, commit, output
+        except Exception as e:
+            _sync_metadata.last_sync_at = now_iso
+            _sync_metadata.last_sync_status = "failed"
+            _sync_metadata.last_sync_trigger = trigger
+            _sync_metadata.last_sync_error = str(e)
+            log_event(logger, 40, "git_pull_exception", f"Exception during git pull: {str(e)}", trigger=trigger)
+            return False, "unknown", str(e)
 
 
 async def commit_and_push_async(

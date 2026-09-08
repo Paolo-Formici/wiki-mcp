@@ -80,6 +80,12 @@ def main():
         default=os.getenv("WIKI_GIT_BRANCH", "main"),
         help="Target git branch to push synced docs to (default: main)"
     )
+    parser.add_argument(
+        "--sync-cron",
+        type=str,
+        default=os.getenv("SYNC_CRON", None),
+        help="Standard 5-field cron expression for periodic git pull (e.g. '*/5 * * * *', remote mode only)"
+    )
 
     args = parser.parse_args()
 
@@ -102,6 +108,7 @@ def main():
             repo_webhook_secret=args.repo_webhook_secret,
             allowed_repos=allowed_list,
             git_branch=args.git_branch,
+            sync_cron=args.sync_cron,
         )
 
         app = get_streamable_app(server, auth_token=args.auth_token)
@@ -110,6 +117,8 @@ def main():
         uvicorn.run(app, host=args.host, port=args.port, log_config=None)
     else:
         # Standard local stdio mode
+        if args.sync_cron:
+            sys.stderr.write("Notice: --sync-cron is only active in --remote mode and ignored in local stdio mode.\n")
         if not wiki_path.exists() or not wiki_path.is_dir():
             sys.stderr.write(f"Error: Target wiki directory not found: {wiki_path}\n")
             sys.exit(1)

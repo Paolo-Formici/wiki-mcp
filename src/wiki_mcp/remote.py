@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 import hmac
 import time
 from pathlib import Path
@@ -17,6 +18,7 @@ from wiki_mcp.git_sync import (
     commit_and_push_async,
     ensure_git_repo,
     get_current_commit,
+    get_sync_metadata,
     pull_repo_async,
     verify_github_signature,
     verify_gitlab_token,
@@ -27,6 +29,7 @@ from wiki_mcp.repo_sync import (
     fetch_github_file_async,
     sync_repo_docs_to_disk,
 )
+from wiki_mcp.scheduler import CronGitSyncScheduler
 from wiki_mcp.server import create_server
 
 logger = get_logger("wiki_mcp.remote")
@@ -76,12 +79,16 @@ def create_remote_server(
     repo_webhook_secret: Optional[str] = None,
     allowed_repos: Optional[List[str]] = None,
     git_branch: str = "main",
+    sync_cron: Optional[str] = None,
 ) -> MCPServer:
-    """Configures the MCPServer with Git synchronization, health checks, and webhooks."""
+    """Configures the MCPServer with Git synchronization, health checks, webhooks, and optional cron scheduler."""
     wiki_dir = wiki_dir.resolve()
     ensure_git_repo(wiki_dir, repo_url)
 
     server = create_server(wiki_dir)
+
+    scheduler = CronGitSyncScheduler(wiki_dir, sync_cron) if sync_cron else None
+    setattr(server, "_cron_scheduler", scheduler)
 
     # -------------------------------------------------------------
     # 1. HEALTH PROBE (/health)
@@ -90,10 +97,22 @@ def create_remote_server(
     async def health_check(request: Request) -> Response:
         """Liveness & readiness probe for load balancers and orchestrators."""
         commit = get_current_commit(wiki_dir)
+        meta = get_sync_metadata()
+        sync_mode = "hybrid" if sync_cron else "webhook"
         return JSONResponse({
             "status": "healthy",
             "wiki": str(wiki_dir),
             "commit": commit,
+            "sync": {
+                "mode": sync_mode,
+                "cron_expression": sync_cron,
+                "cron_enabled": bool(sync_cron),
+                "last_sync_at": meta.last_sync_at,
+                "last_sync_trigger": meta.last_sync_trigger,
+                "last_sync_status": meta.last_sync_status,
+                "last_sync_commit": meta.last_sync_commit,
+                "last_sync_error": meta.last_sync_error,
+            },
         })
 
     # -------------------------------------------------------------
@@ -121,7 +140,7 @@ def create_remote_server(
 
         # Execute async git pull
         start_time = time.time()
-        success, commit, output = await pull_repo_async(wiki_dir)
+        success, commit, output = await pull_repo_async(wiki_dir, trigger="webhook")
         duration_ms = round((time.time() - start_time) * 1000, 2)
 
         if not success:
@@ -228,9 +247,29 @@ def create_remote_server(
 
 
 def get_streamable_app(server: MCPServer, auth_token: Optional[str] = None) -> Starlette:
-    """Builds the Starlette ASGI app with configured token authentication."""
+    """Builds the Starlette ASGI app with configured token authentication and scheduler lifespan."""
     app = server.streamable_http_app()
     if auth_token:
         app.add_middleware(TokenAuthMiddleware, auth_token=auth_token)
+
+    scheduler: Optional[CronGitSyncScheduler] = getattr(server, "_cron_scheduler", None)
+    if scheduler:
+        orig_lifespan = app.router.lifespan_context
+
+        @asynccontextmanager
+        async def custom_lifespan(app_instance):
+            scheduler.start()
+            try:
+                if orig_lifespan:
+                    async with orig_lifespan(app_instance):
+                        yield
+                else:
+                    yield
+            finally:
+                await scheduler.stop()
+
+        app.router.lifespan_context = custom_lifespan
+
     return app
+
 
