@@ -1,4 +1,4 @@
-module wiki-mcp
+module dev-mcp
 
 go 1.25.5
 

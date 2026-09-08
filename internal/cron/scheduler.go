@@ -3,7 +3,7 @@ package cron
 import (
 	"log"
 
-	"wiki-mcp/internal/git"
+	"dev-mcp/internal/git"
 
 	"github.com/robfig/cron/v3"
 )

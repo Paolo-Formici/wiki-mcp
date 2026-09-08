@@ -1,7 +1,7 @@
 services:
-  wiki-mcp:
+  dev-mcp:
     build: .
-    container_name: wiki-mcp
+    container_name: dev-mcp
     restart: unless-stopped
     ports:
       - "8080:8080"

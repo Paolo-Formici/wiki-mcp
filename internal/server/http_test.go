@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"wiki-mcp/internal/config"
-	"wiki-mcp/internal/git"
-	"wiki-mcp/internal/wiki"
+	"dev-mcp/internal/config"
+	"dev-mcp/internal/git"
+	"dev-mcp/internal/wiki"
 )
 
 func TestHTTPServerHealthAndAuth(t *testing.T) {

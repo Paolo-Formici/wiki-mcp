@@ -33,7 +33,7 @@
 ### 2. Automated AI Ingestion from `raw/repos/` into Curated Layers (`entities/`, `concepts/`)
 * **Status**: Backlog / Explicitly Deferred (Manual Curation for Now)
 * **Context**:
-  `wiki-mcp` automatically syncs 1:1 documentation and contracts from company repositories into `raw/repos/<repo-name>/` via webhook push.
+  `dev-mcp` automatically syncs 1:1 documentation and contracts from company repositories into `raw/repos/<repo-name>/` via webhook push.
 * **Proposed Enhancement**:
   When new or modified raw documentation lands in `raw/repos/<repo-name>/`, trigger an AI agent pipeline to:
   1. Detect whether the repository is a newly ingested service or an update to an existing one.

@@ -5,15 +5,15 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"wiki-mcp/internal/wiki"
+	"dev-mcp/internal/wiki"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
 
-// NewMCPServer creates and registers all tools for wiki-mcp matching the Python API.
+// NewMCPServer creates and registers all tools for dev-mcp matching the Python API.
 func NewMCPServer(w *wiki.Wiki) *server.MCPServer {
-	s := server.NewMCPServer("wiki-mcp", "0.2.0")
+	s := server.NewMCPServer("dev-mcp", "0.2.0")
 
 	// 1. read_orientation
 	s.AddTool(mcp.NewTool("read_orientation",

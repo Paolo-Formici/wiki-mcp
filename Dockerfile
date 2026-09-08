@@ -10,7 +10,7 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/wiki-mcp cmd/wiki-mcp/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/dev-mcp cmd/dev-mcp/main.go
 
 # Final runtime stage
 FROM alpine:3.20
@@ -18,7 +18,7 @@ FROM alpine:3.20
 RUN apk add --no-cache git ca-certificates curl
 
 WORKDIR /app
-COPY --from=builder /bin/wiki-mcp /usr/local/bin/wiki-mcp
+COPY --from=builder /bin/dev-mcp /usr/local/bin/dev-mcp
 
 ENV WIKI_DIR=/data/wiki
 ENV HOST=0.0.0.0
@@ -29,5 +29,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:8080/health || exit 1
 
-ENTRYPOINT ["wiki-mcp"]
+ENTRYPOINT ["dev-mcp"]
 CMD ["serve"]

@@ -1,4 +1,4 @@
-BINARY_NAME=wiki-mcp
+BINARY_NAME=dev-mcp
 BUILD_DIR=bin
 GO_FILES=$(shell find . -name '*.go' -not -path "./vendor/*")
 
@@ -8,7 +8,7 @@ all: build
 
 build:
 	@mkdir -p $(BUILD_DIR)
-	go build -ldflags="-s -w" -o $(BUILD_DIR)/$(BINARY_NAME) cmd/wiki-mcp/main.go
+	go build -ldflags="-s -w" -o $(BUILD_DIR)/$(BINARY_NAME) cmd/dev-mcp/main.go
 
 test:
 	go test -v -race ./...
@@ -23,4 +23,4 @@ run-serve: build
 	./$(BUILD_DIR)/$(BINARY_NAME) serve --wiki-dir ../dev-wiki --port 8080
 
 docker-build:
-	docker build -t wiki-mcp:latest .
+	docker build -t dev-mcp:latest .

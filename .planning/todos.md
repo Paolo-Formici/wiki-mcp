@@ -9,7 +9,7 @@ with no version control. It invented its own versioning layer:
 - `sha256` in raw/ frontmatter — content hashing to detect drift (duplicates `git diff`)
 - `updated:` date bumping — manual staleness tracking (duplicates `git log --follow`)
 
-Now that dev-wiki is git-backed and served via wiki-mcp with webhook-triggered
+Now that dev-wiki is git-backed and served via dev-mcp with webhook-triggered
 `git pull`, all three are redundant work that adds merge-conflict risk for zero value.
 
 ## What to Change
@@ -17,7 +17,7 @@ Now that dev-wiki is git-backed and served via wiki-mcp with webhook-triggered
 ### 1. Drop `log.md` from the workflow
 - **SCHEMA.md**: Remove "Every action must be appended to `log.md`" convention
 - **SKILL.md**: Remove log.md orientation step, remove log.md append from ingest/query/lint flows
-- **wiki-mcp `read_orientation()`**: Replace `log.md` tail with `git log -n 10 --oneline --stat`
+- **dev-mcp `read_orientation()`**: Replace `log.md` tail with `git log -n 10 --oneline --stat`
 - **dev-wiki**: Keep existing log.md as-is (it's historical record), just stop appending to it
 - Git commit messages become the log. They already are — we were writing them twice.
 
@@ -28,7 +28,7 @@ Now that dev-wiki is git-backed and served via wiki-mcp with webhook-triggered
 - Source drift detection: re-fetch URL, diff against `git show HEAD:raw/articles/<file>`
 - Don't retroactively strip sha256 from existing files — YAGNI, causes pointless churn
 
-### 3. Add `get_recent_changes()` tool to wiki-mcp
+### 3. Add `get_recent_changes()` tool to dev-mcp
 - Replaces `log.md` tail reading for agent orientation
 - Wraps `git log` / `git diff --stat` — what actually changed, by whom, when
 - Simple. Uses what's already there.
@@ -44,6 +44,6 @@ Now that dev-wiki is git-backed and served via wiki-mcp with webhook-triggered
 
 1. Update SCHEMA.md in dev-wiki (remove log.md convention, remove sha256 spec)
 2. Update SKILL.md in dev-wiki (remove log.md and sha256 from all flows)
-3. Add `get_recent_changes()` tool to wiki-mcp server.py
+3. Add `get_recent_changes()` tool to dev-mcp
 4. Update `read_orientation()` to use git log instead of log.md
 5. Test locally via stdio mode

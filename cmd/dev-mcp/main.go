@@ -10,11 +10,11 @@ import (
 	"syscall"
 	"time"
 
-	"wiki-mcp/internal/config"
-	"wiki-mcp/internal/cron"
-	"wiki-mcp/internal/git"
-	"wiki-mcp/internal/server"
-	"wiki-mcp/internal/wiki"
+	"dev-mcp/internal/config"
+	"dev-mcp/internal/cron"
+	"dev-mcp/internal/git"
+	"dev-mcp/internal/server"
+	"dev-mcp/internal/wiki"
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/cobra"
@@ -27,7 +27,7 @@ var (
 
 func main() {
 	rootCmd := &cobra.Command{
-		Use:     "wiki-mcp",
+		Use:     "dev-mcp",
 		Short:   "Model Context Protocol server for Dev Wiki",
 		Version: version,
 	}
@@ -92,7 +92,7 @@ func main() {
 			signal.Notify(stopChan, os.Interrupt, syscall.SIGTERM)
 
 			go func() {
-				log.Printf("Starting wiki-mcp HTTP server on http://%s (wiki: %s)\n", addr, cfg.WikiDir)
+				log.Printf("Starting dev-mcp HTTP server on http://%s (wiki: %s)\n", addr, cfg.WikiDir)
 				if err := serverInstance.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 					log.Fatalf("HTTP server error: %v", err)
 				}

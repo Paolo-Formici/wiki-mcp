@@ -6,7 +6,7 @@ import (
 	"strconv"
 )
 
-// Config holds runtime configuration options for wiki-mcp.
+// Config holds runtime configuration options for dev-mcp.
 type Config struct {
 	WikiDir       string
 	Host          string

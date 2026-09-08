@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"wiki-mcp/internal/config"
-	"wiki-mcp/internal/git"
+	"dev-mcp/internal/config"
+	"dev-mcp/internal/git"
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
 )

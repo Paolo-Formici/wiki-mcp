@@ -1,4 +1,4 @@
-# wiki-mcp
+# dev-mcp
 
 A high-performance, read-only [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server written in **Go** for [Karpathy-style LLM Markdown wikis](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f).
 
@@ -23,11 +23,11 @@ Zero file mutation or deletion tools are exposed, guaranteeing your wiki's integ
 Requires Go 1.23+:
 
 ```bash
-# Build static binary to bin/wiki-mcp
+# Build static binary to bin/dev-mcp
 make build
 
 # Or install to $GOPATH/bin
-go install ./cmd/wiki-mcp
+go install ./cmd/dev-mcp
 ```
 
 ---
@@ -37,7 +37,7 @@ go install ./cmd/wiki-mcp
 Run directly against your local wiki:
 
 ```bash
-./bin/wiki-mcp stdio --wiki-dir /path/to/wiki
+./bin/dev-mcp stdio --wiki-dir /path/to/wiki
 ```
 
 ### Local Client Config (`mcp_config.json`):
@@ -45,7 +45,7 @@ Run directly against your local wiki:
 {
   "mcpServers": {
     "dev-wiki": {
-      "command": "/Users/paolo/Projects/wiki-mcp/bin/wiki-mcp",
+      "command": "/Users/paolo/Projects/dev-mcp/bin/dev-mcp",
       "args": [
         "stdio",
         "--wiki-dir",
@@ -60,11 +60,11 @@ Run directly against your local wiki:
 
 ## Running in Remote Mode (Streamable HTTP)
 
-In Remote Mode, `wiki-mcp` runs as a centralized daemon on a server or container. It optionally clones/pulls the wiki Git repo on startup and listens for incoming IDE connections and GitHub/GitLab webhooks.
+In Remote Mode, `dev-mcp` runs as a centralized daemon on a server or container. It optionally clones/pulls the wiki Git repo on startup and listens for incoming IDE connections and GitHub/GitLab webhooks.
 
 ### CLI Launch
 ```bash
-./bin/wiki-mcp serve \
+./bin/dev-mcp serve \
   --host 0.0.0.0 \
   --port 8080 \
   --wiki-dir /data/wiki \
@@ -88,7 +88,7 @@ In Remote Mode, `wiki-mcp` runs as a centralized daemon on a server or container
 ---
 
 ### Remote Git Sync Modes
-`wiki-mcp` remote mode supports three operational synchronization models:
+`dev-mcp` remote mode supports three operational synchronization models:
 1. **Webhook-only (Default):** Set `WEBHOOK_SECRET`. When commits are pushed to the wiki repository, GitHub/GitLab hits `POST /webhook` to trigger an immediate `git pull --ff-only`.
 2. **Cron-only (Zero-Ingress / Private Networks):** Set `SYNC_CRON="*/5 * * * *"`. The server periodically runs `git pull --ff-only` in the background. Ideal for air-gapped or private networks/VPCs where opening inbound webhook ingress is not possible or desired.
 3. **Hybrid (GitOps Best Practice):** Configure both `WEBHOOK_SECRET` and `SYNC_CRON`. Pushes trigger instant zero-latency sync via webhook, while the cron scheduler acts as a background reconciliation loop ensuring eventual consistency. An internal mutex guarantees that webhook and cron pulls never collide.
@@ -135,7 +135,7 @@ docker run -d \
   -e REPO_URL="https://github.com/your-org/dev-wiki.git" \
   -e AUTH_TOKEN="team-secret-token" \
   -e WEBHOOK_SECRET="webhook-hmac-secret" \
-  wiki-mcp:latest
+  dev-mcp:latest
 ```
 
 ---
@@ -169,7 +169,7 @@ flowchart TB
         HumanDev["Human Curators<br/>Obsidian / VS Code"]
     end
 
-    subgraph Server["wiki-mcp Server (Go)"]
+    subgraph Server["dev-mcp Server (Go)"]
         AuthMiddleware["TokenAuthMiddleware<br/>/mcp security"]
         GoMCPEngine["Go MCP Engine (mcp-go)<br/>read_orientation, search_wiki, get_page"]
         
