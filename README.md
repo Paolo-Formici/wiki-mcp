@@ -77,6 +77,17 @@ uv run --directory /Users/paolo/Projects/wiki-mcp wiki-mcp   --remote   --host 0
 
 ---
 
+### Clarification: Webhook for Wiki Repo vs. Cron for Source Repos
+
+It is essential to understand the clear separation of responsibilities:
+
+| Responsibility | Mechanism | Target Repository | Description |
+| :--- | :--- | :--- | :--- |
+| **Wiki Read Cache Mirror** | `POST /webhook` and/or `SYNC_CRON` | **Only the wiki repo** (`dev-wiki`) | Keeps `wiki-mcp`'s local read cache synchronized with `dev-wiki` on GitHub. When a curator or PR updates `entities/` or `concepts/`, `wiki-mcp` pulls immediately. |
+| **External Source Docs Ingestion** | **Scheduled Cron Orchestrator** | **Team repos** (`raw/repos/`) | External team repos do **NOT** send webhooks to `wiki-mcp`. A scheduled cron job pulls their documentation into `dev-wiki/raw/repos/`, checks diffs via native Git, and opens a **Pull Request** for human review. |
+
+---
+
 ## Remote Endpoints
 
 * **`POST /mcp`**: The core MCP Streamable HTTP endpoint. If `AUTH_TOKEN` is configured, requests must supply `Authorization: Bearer <AUTH_TOKEN>`.
