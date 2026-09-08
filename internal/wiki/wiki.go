@@ -32,7 +32,6 @@ type PageResult struct {
 	Path        string         `json:"path"`
 	Frontmatter map[string]any `json:"frontmatter"`
 	Content     string         `json:"content"`
-	Error       string         `json:"error,omitempty"`
 }
 
 // New initializes a Wiki instance pointing to rootDir.
@@ -301,4 +300,35 @@ func extractSnippet(text, query string, maxChars int) string {
 	}
 
 	return prefix + snippet + suffix
+}
+
+func normalizeTags(raw interface{}) []string {
+	var tags []string
+	if raw == nil {
+		return tags
+	}
+
+	switch v := raw.(type) {
+	case []interface{}:
+		for _, item := range v {
+			if s, ok := item.(string); ok {
+				if trimmed := strings.TrimSpace(s); trimmed != "" {
+					tags = append(tags, trimmed)
+				}
+			}
+		}
+	case []string:
+		for _, s := range v {
+			if trimmed := strings.TrimSpace(s); trimmed != "" {
+				tags = append(tags, trimmed)
+			}
+		}
+	case string:
+		for _, part := range strings.Split(v, ",") {
+			if trimmed := strings.TrimSpace(part); trimmed != "" {
+				tags = append(tags, trimmed)
+			}
+		}
+	}
+	return tags
 }
