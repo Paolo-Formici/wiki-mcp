@@ -332,3 +332,39 @@ func normalizeTags(raw interface{}) []string {
 	}
 	return tags
 }
+
+// GetHelp returns the content of HELP.md or help.md from the wiki root if it exists,
+// or a comprehensive built-in quick reference card if not found.
+func (w *Wiki) GetHelp() string {
+	candidates := []string{"HELP.md", "help.md"}
+	for _, name := range candidates {
+		if b, err := os.ReadFile(filepath.Join(w.rootDir, name)); err == nil && len(strings.TrimSpace(string(b))) > 0 {
+			return string(b)
+		}
+	}
+	return DefaultHelp()
+}
+
+// DefaultHelp returns the built-in quick reference markdown when no custom HELP.md is present.
+func DefaultHelp() string {
+	return `# Dev Wiki & Engineering Tools Quick Reference
+
+Welcome to the team knowledge base and engineering assistant.
+
+### 📚 Knowledge Base Structure
+This wiki is organized using the Karpathy LLM-wiki pattern across four curated layers:
+- **` + "`concepts/`" + `**: Foundational architectural decisions, security standards, coding guidelines, and technical definitions.
+- **` + "`entities/`" + `**: Services, internal components, repositories, databases, and third-party API integrations.
+- **` + "`comparisons/`" + `**: Technology evaluations, architectural trade-offs (e.g., REST vs gRPC, Redis vs Memcached).
+- **` + "`queries/`" + `**: Pre-computed answers to recurring cross-cutting engineering questions.
+
+### 🛠️ Available MCP Tools
+- **` + "`read_orientation()`" + `**: Reads SCHEMA.md, index.md, and recent changelogs in a single roundtrip. Call this first to orient yourself.
+- **` + "`search_wiki(query, tag)`" + `**: Fast full-text and tag search across all curated pages.
+- **` + "`get_page(slug_or_path)`" + `**: Reads any wiki page by relative path (e.g., ` + "`concepts/auth.md`" + `) or slug (e.g., ` + "`auth`" + `) with parsed frontmatter and markdown body.
+
+### 💡 Tips for Developers & Agents
+1. **Search before building**: Query existing concepts or entity pages before designing new architecture.
+2. **Read-only integrity**: The wiki is read-only via MCP to prevent headless merge conflicts and ensure data integrity.
+3. **Contributing**: Propose new documentation or edits via pull requests on the wiki Git repository.`
+}

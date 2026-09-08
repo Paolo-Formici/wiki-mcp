@@ -81,5 +81,18 @@ func NewMCPServer(w *wiki.Wiki) *server.MCPServer {
 		return mcp.NewToolResultText(string(jsonBytes)), nil
 	})
 
+	// 4. Prompt: wiki-help
+	s.AddPrompt(mcp.NewPrompt("wiki-help",
+		mcp.WithPromptDescription("Quick reference guide for navigating and using the team dev-wiki and engineering tools"),
+	), func(ctx context.Context, req mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+		helpText := w.GetHelp()
+		return mcp.NewGetPromptResult(
+			"Team Dev-Wiki Quick Reference Guide",
+			[]mcp.PromptMessage{
+				mcp.NewPromptMessage(mcp.RoleUser, mcp.NewTextContent(helpText)),
+			},
+		), nil
+	})
+
 	return s
 }

@@ -18,6 +18,12 @@ Zero file mutation or deletion tools are exposed, guaranteeing your wiki's integ
 
 ---
 
+## Prompts
+
+* **`wiki-help`**: Quick reference guide for navigating and using the team dev-wiki and engineering tools. Dynamically serves `HELP.md` / `help.md` from the wiki repository if present, or a rich built-in reference card.
+
+---
+
 ## Build & Install
 
 Requires Go 1.23+:

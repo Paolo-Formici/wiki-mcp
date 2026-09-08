@@ -86,4 +86,20 @@ Details about JWT and OAuth.`
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result for query 'OAuth', got %d", len(results))
 	}
+
+	// 7. Test GetHelp default fallback
+	helpText := w.GetHelp()
+	if helpText == "" || len(helpText) < 50 {
+		t.Errorf("expected non-empty default help text, got %q", helpText)
+	}
+
+	// 8. Test GetHelp with custom HELP.md
+	customHelp := "# Custom Team Help\nCall team lead on Slack."
+	if err := os.WriteFile(filepath.Join(tempDir, "HELP.md"), []byte(customHelp), 0644); err != nil {
+		t.Fatalf("failed to write HELP.md: %v", err)
+	}
+	helpTextCustom := w.GetHelp()
+	if helpTextCustom != customHelp {
+		t.Errorf("expected custom help %q, got %q", customHelp, helpTextCustom)
+	}
 }
